@@ -104,6 +104,151 @@ make build
 source .env.local && ./goclaw
 ```
 
+### 계층형 하위 워크스페이스 (WIP)
+
+> **상태:** 실험적 스캐폴딩이 **2026-04-20 14:21:29 UTC** 기준 `dev` 브랜치에 반영됨  
+> **최신 구현 커밋:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`
+
+현재 `dev` 브랜치에는 **마스터/관리자 워크스페이스 → 하위 워크스페이스** 운영 모델을 위한 첫 번째 기반 작업이 들어가 있습니다.
+이 구현은 즉시 스키마 마이그레이션을 강제하지 않도록 **child tenant + tenant settings** 방식으로 시작했습니다.
+
+#### 현재 가능한 것
+
+- 마스터/관리자 tenant가 API를 통해 **하위 워크스페이스**를 생성할 수 있습니다.
+- 하위 워크스페이스는 **스토리지, 워크스페이스 경로, 스킬 디렉토리**를 독립적으로 유지합니다.
+- `inherit_parent_access`를 통해 부모 권한 상속을 선택적으로 허용할 수 있습니다.
+- 각 하위 워크스페이스는 다음 메타데이터를 가질 수 있습니다.
+  - git 연동 메타데이터
+  - 채널 바인딩 메타데이터
+  - 출력 바인딩 메타데이터
+  - 코딩 전용 provider / model 선호값
+  - reasoning 출력 모드 (`full`, `summary`, `none`)
+- 공유/public 스킬을 **하위 워크스페이스로 포크**할 수 있습니다.
+- 포크되거나 업로드된 스킬은 `.runtime/` 아래에 **가벼운 Python 런타임 래퍼**를 준비할 수 있습니다.
+- 스킬 오작동 / 예시 / 이슈 피드백을 스킬 폴더에 구조화된 기록으로 남길 수 있습니다.
+
+#### 이번 업데이트에서 추가된 엔드포인트
+
+| 엔드포인트 | 목적 | 비고 |
+|---|---|---|
+| `GET /v1/tenants/{id}/children` | 부모 tenant의 하위 워크스페이스 목록 조회 | owner/admin 경로 |
+| `POST /v1/tenants/{id}/children` | 하위 워크스페이스 생성 | child tenant settings로 저장 |
+| `POST /v1/skills/{id}/fork` | 공유/public 스킬을 현재 tenant 공간으로 포크 | `.runtime`, `feedback`, `.env`, 명백한 credential 파일 제외 |
+| `POST /v1/skills/{id}/prepare-runtime` | 스킬용 런타임 산출물 준비 | 현재 MVP는 Python 중심 |
+| `GET /v1/skills/{id}/feedback` | 기록된 이슈/예시 피드백 조회 | `feedback/examples.jsonl` 읽기 |
+| `POST /v1/skills/{id}/feedback` | 이슈/예시 피드백 추가 | 구조화된 JSONL 레코드 |
+
+#### 현재 인식하는 child workspace 설정
+
+| 설정 | 의미 |
+|---|---|
+| `parent_tenant_id` | 부모/마스터 워크스페이스 식별자 |
+| `inherit_parent_access` | 부모 admin/owner가 child workspace를 접근/관리할 수 있도록 허용 |
+| `workspace_mode` | 격리 전략 의도값. 현재 기본값은 `isolated` |
+| `git_links` | 향후 sync/mirroring에 사용할 외부 git 저장소 메타데이터 |
+| `channel_bindings` | 어떤 채널/chat/topic이 어떤 agent에 묶일지 설명하는 메타데이터 |
+| `output_bindings` | webhook/API 채널 같은 outbound 대상 메타데이터 |
+| `coding_provider` | 향후 코딩 작업 전용 라우팅에 사용할 선호 provider |
+| `coding_model` | 코딩 작업용 선호 모델 |
+| `reasoning_output` | 채널에 보이는 reasoning 정책: `full`, `summary`, `none` |
+
+#### Reasoning 출력 모드
+
+| 모드 | 동작 |
+|---|---|
+| `full` | 지원되는 스트리밍 채널에 reasoning preview를 그대로 표시 |
+| `summary` | reasoning을 짧은 결정적(summary) 형태로 표시 |
+| `none` | 채널에는 reasoning을 숨기고 최종 답변 흐름만 유지 |
+
+#### 이번 업데이트에서 추가된 스킬 워크스페이스 동작
+
+| 기능 | 현재 동작 |
+|---|---|
+| 스킬 포크 | 스킬을 현재 tenant 스킬 저장소로 복사하여 로컬 수정 가능 |
+| 민감 파일 회피 | 포크 시 `.runtime`, `feedback`, `.env`, `secrets/`, 명백한 credential 계열 파일 제외 |
+| 런타임 준비 | Python 엔트리포인트 스킬에 대해 `.runtime/run.py` + `.runtime/manifest.json` 생성 |
+| 피드백 기록 | 구조화된 예시/이슈를 `feedback/examples.jsonl`에 append |
+
+#### 현재 한계
+
+이 구현은 **완성본이 아니라 방향을 잡기 위한 스캐폴딩**입니다.
+
+- `channel_bindings`, `output_bindings`는 현재 **메타데이터로 저장만** 되고, 완전한 DB 기반 실시간 라우팅까지는 아직 연결되지 않았습니다.
+- `git_links`는 현재 **설명용 메타데이터**이며, 실제 저장소 sync/mirroring 실행 로직은 아직 필요합니다.
+- 부모/자식 권한 상속은 HTTP tenant 해석 쪽에 일부 연결됐지만, 전체 엔드투엔드 검증은 더 필요합니다.
+- 런타임 준비는 현재 **Python MVP만** 대상으로 합니다.
+- 전체 compile/build 검증은 Go 실행 가능한 환경에서 추가 확인이 필요합니다.
+
+#### Child workspace 생성 예시 payload
+
+```json
+{
+  "name": "client-a-workspace",
+  "slug": "client-a",
+  "inherit_parent_access": true,
+  "workspace_mode": "isolated",
+  "reasoning_output": "summary",
+  "coding_provider": "codex",
+  "coding_model": "gpt-5-codex",
+  "git_links": [
+    {
+      "name": "client-a-repo",
+      "repo_url": "https://github.com/example/client-a",
+      "branch": "main",
+      "directory": "workspace",
+      "mode": "mirror"
+    }
+  ],
+  "channel_bindings": [
+    {
+      "channel_instance_id": "<channel-instance-uuid>",
+      "match_chat_ids": ["1234567890"],
+      "agent_id": "<agent-uuid>",
+      "enabled": true
+    }
+  ],
+  "output_bindings": [
+    {
+      "type": "webhook",
+      "target": "https://example.com/hooks/reply",
+      "channel": "discord"
+    }
+  ]
+}
+```
+
+#### 스킬 포크 플로우 예시
+
+```bash
+# 1) 공유/public 스킬을 현재 tenant 워크스페이스로 포크
+curl -X POST http://localhost:18790/v1/skills/<skill-id>/fork \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "client-a-custom-skill",
+    "slug": "client-a-custom-skill",
+    "visibility": "internal"
+  }'
+
+# 2) Python 엔트리포인트가 있다면 runtime 산출물 준비
+curl -X POST http://localhost:18790/v1/skills/<forked-skill-id>/prepare-runtime \
+  -H 'Authorization: Bearer <token>'
+
+# 3) 스킬에 이슈/예시 피드백 기록
+curl -X POST http://localhost:18790/v1/skills/<forked-skill-id>/feedback \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "issue",
+    "behavior_ref": "tool invocation",
+    "code_path": "scripts/run.py",
+    "prompt": "저장소를 요약해줘",
+    "expected_behavior": "저장소의 핵심을 간결하게 요약",
+    "actual_behavior": "누락된 dependency 오류 발생",
+    "note": "dependency 부재 시 fallback 처리 필요"
+  }'
+```
+
 ### Docker 사용
 
 ```bash
