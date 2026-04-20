@@ -108,6 +108,10 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 							"channel", msg.Channel, "error", err2)
 					}
 				}
+			} else {
+				for _, clone := range m.expandOutboundBindings(sendCtx, msg) {
+					m.bus.PublishOutbound(clone)
+				}
 			}
 
 			// Clean up temp media files only. Workspace-generated files are preserved

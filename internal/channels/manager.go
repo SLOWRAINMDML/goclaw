@@ -57,6 +57,7 @@ type Manager struct {
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector
+	tenantStore      store.TenantStore
 }
 
 type asyncTask struct {
@@ -266,6 +267,13 @@ func (m *Manager) SetContactCollector(cc *store.ContactCollector) {
 			bc.SetContactCollector(cc)
 		}
 	}
+}
+
+// SetTenantStore injects the tenant store so runtime channel/output bindings can be resolved.
+func (m *Manager) SetTenantStore(ts store.TenantStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tenantStore = ts
 }
 
 // ChannelTypeForName returns the platform type for a channel instance name.

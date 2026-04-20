@@ -27,6 +27,7 @@ type ConsumerDeps struct {
 	QuotaChecker     *channels.QuotaChecker
 	ContactCollector *store.ContactCollector
 	SystemConfigs    store.SystemConfigStore
+	TenantStore      store.TenantStore
 	TaskRunSessions  sync.Map
 	SubagentMgr      *tools.SubagentManager
 	BgWg             sync.WaitGroup

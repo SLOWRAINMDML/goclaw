@@ -426,6 +426,7 @@ func runGateway() {
 
 	// Channel manager
 	channelMgr := channels.NewManager(msgBus)
+	channelMgr.SetTenantStore(pgStores.Tenants)
 	deps.channelMgr = channelMgr
 
 	// Wire channel member resolver into permission grant paths (WS + HTTP) so

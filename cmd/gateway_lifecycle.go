@@ -135,7 +135,7 @@ func (d *gatewayDeps) runLifecycle(
 		d.channelMgr.SetContactCollector(contactCollector)
 	}
 
-	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, d.pgStores.SystemConfigs, deps.postTurn, deps.subagentMgr)
+	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, d.pgStores.Tenants, contactCollector, d.pgStores.SystemConfigs, deps.postTurn, deps.subagentMgr)
 
 	// Task recovery ticker: re-dispatches stale/pending team tasks on startup and periodically.
 	var taskTicker *tasks.TaskTicker
