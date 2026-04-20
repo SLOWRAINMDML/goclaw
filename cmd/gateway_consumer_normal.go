@@ -46,6 +46,11 @@ func processNormalMessage(
 		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel)
 		return
 	}
+	providerOverride, modelOverride := resolveTenantCodingOverride(ctx, deps, msg.TenantID)
+	effectiveProviderName := agentLoop.ProviderName()
+	if providerOverride != nil {
+		effectiveProviderName = providerOverride.Name()
+	}
 
 	// Build session key based on scope config (matching TS buildAgentPeerSessionKey).
 	peerKind := msg.PeerKind
@@ -159,7 +164,7 @@ func processNormalMessage(
 
 	// --- Quota check ---
 	if deps.QuotaChecker != nil {
-		qResult := deps.QuotaChecker.Check(ctx, userID, msg.Channel, agentLoop.ProviderName())
+		qResult := deps.QuotaChecker.Check(ctx, userID, msg.Channel, effectiveProviderName)
 		if !qResult.Allowed {
 			slog.Warn("security.quota_exceeded",
 				"user_id", userID,
@@ -275,12 +280,20 @@ func processNormalMessage(
 	// to detect status queries, cancel requests, or steer/new_task for mid-run injection.
 	// Only for DM (maxConcurrent=1) where messages queue behind the active run.
 	if maxConcurrent == 1 && deps.Agents.IsSessionBusy(sessionKey) {
-		if loop, ok := agentLoop.(*agent.Loop); ok && loop.Provider() != nil {
+		intentProvider := agentLoop.Provider()
+		intentModel := agentLoop.Model()
+		if providerOverride != nil {
+			intentProvider = providerOverride
+		}
+		if modelOverride != "" {
+			intentModel = modelOverride
+		}
+		if intentProvider != nil {
 			locale := msg.Metadata["locale"]
 			if locale == "" {
 				locale = "en"
 			}
-			intent := agent.ClassifyIntent(ctx, loop.Provider(), loop.Model(), msg.Content)
+			intent := agent.ClassifyIntent(ctx, intentProvider, intentModel, msg.Content)
 			switch intent {
 			case agent.IntentStatusQuery:
 				status := deps.Agents.GetActivity(sessionKey)
@@ -392,6 +405,8 @@ func processNormalMessage(
 		ToolAllow:         msg.ToolAllow,
 		ExtraSystemPrompt: extraPrompt,
 		SkillFilter:       skillFilter,
+		ModelOverride:     modelOverride,
+		ProviderOverride:  providerOverride,
 	}, scheduler.ScheduleOpts{
 		MaxConcurrent: maxConcurrent,
 	})

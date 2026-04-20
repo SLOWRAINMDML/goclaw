@@ -425,6 +425,7 @@ func wireExtras(
 				DelegationID:  req.DelegationID,
 				ParentAgentID: req.FromAgentKey,
 			}
+			applyTenantCodingOverride(ctx, stores.Tenants, providerReg, store.TenantIDFromContext(ctx), &runReq)
 			result, err := loop.Run(delegateCtx, runReq)
 			if err != nil {
 				return tools.DelegateResult{}, err

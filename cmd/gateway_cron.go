@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -24,7 +25,7 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, tenantStore store.TenantStore, providerRegistry *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
 		if agentID == "" && agentStore != nil {
@@ -94,8 +95,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			sessionMgr.Save(cronCtx, sessionKey)
 		}
 
-		// Schedule through cron lane — scheduler handles agent resolution and concurrency
-		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
+		cronReq := agent.RunRequest{
 			SessionKey:        sessionKey,
 			Message:           job.Payload.Message,
 			Channel:           channel,
@@ -108,7 +108,9 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			ExtraSystemPrompt: extraPrompt,
 			TraceName:         fmt.Sprintf("Cron [%s] - %s", job.Name, agentID),
 			TraceTags:         []string{"cron"},
-		})
+		}
+		applyTenantCodingOverride(cronCtx, tenantStore, providerRegistry, job.TenantID, &cronReq)
+		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, cronReq)
 
 		// Block until the scheduled run completes or the timeout fires.
 		var outcome scheduler.RunOutcome

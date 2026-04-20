@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -24,6 +25,8 @@ import (
 func makeDelegateAnnounceCallback(
 	subagentMgr *tools.SubagentManager,
 	msgBus *bus.MessageBus,
+	tenantStore store.TenantStore,
+	providerRegistry *providers.Registry,
 ) func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
 	return func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
 		roster := subagentMgr.RosterForParent(meta.ParentAgent)
@@ -128,6 +131,8 @@ func processSubagentAnnounceLoop(
 	subagentMgr *tools.SubagentManager,
 	sched *scheduler.Scheduler,
 	msgBus *bus.MessageBus,
+	tenantStore store.TenantStore,
+	providerRegistry *providers.Registry,
 	cfg *config.Config,
 ) {
 	// Ensure tenant scope is always set for the scheduler.
@@ -188,6 +193,7 @@ func processSubagentAnnounceLoop(
 			ParentTraceID:    r.ParentTraceID,
 			ParentRootSpanID: r.ParentRootSpanID,
 		}
+		applyTenantCodingOverride(ctx, tenantStore, providerRegistry, r.TenantID, &req)
 
 		outCh := sched.Schedule(ctx, scheduler.LaneSubagent, req)
 		outcome := <-outCh

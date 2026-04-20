@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -60,6 +61,8 @@ func processAnnounceLoop(
 	sched *scheduler.Scheduler,
 	msgBus *bus.MessageBus,
 	teamStore store.TeamStore,
+	tenantStore store.TenantStore,
+	providerRegistry *providers.Registry,
 	postTurn tools.PostTurnProcessor,
 	cfg *config.Config,
 ) {
@@ -113,6 +116,8 @@ func processAnnounceLoop(
 			req.ContentSuffix = mediaToMarkdownFromPaths(req.ForwardMedia, cfg)
 			req.ForwardMedia = nil
 		}
+
+		applyTenantCodingOverride(ctx, tenantStore, providerRegistry, store.TenantIDFromContext(ctx), &req)
 
 		// Process batch in closure so defer is scoped per iteration (panic safety).
 		func() {

@@ -144,7 +144,7 @@ func handleSubagentAnnounce(
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
-			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
+			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.TenantStore, deps.ProviderRegistry, deps.Cfg)
 		})
 	}
 
@@ -240,7 +240,7 @@ func handleTeammateMessage(
 	taskActionFlags := &tools.TaskActionFlags{}
 	schedCtx := tools.WithTaskActionFlags(ctx, taskActionFlags)
 
-	outCh := deps.Sched.Schedule(schedCtx, scheduler.LaneTeam, agent.RunRequest{
+	teamReq := agent.RunRequest{
 		SessionKey:      sessionKey,
 		Message:         msg.Content,
 		Channel:         origChannel,
@@ -259,7 +259,9 @@ func handleTeammateMessage(
 		WorkspaceChatID: origChatID,
 		TeamID:          msg.Metadata[tools.MetaTeamID],
 		LinkedTraceID:   linkedTraceID,
-	})
+	}
+	applyTenantCodingOverride(ctx, deps.TenantStore, deps.ProviderRegistry, store.TenantIDFromContext(ctx), &teamReq)
+	outCh := deps.Sched.Schedule(schedCtx, scheduler.LaneTeam, teamReq)
 
 	deps.BgWg.Add(1)
 	go func(origCh, origChatID, senderID, taskID string, outMeta, inMeta map[string]string) {
@@ -377,7 +379,7 @@ func handleTeammateMessage(
 			ParentRootSpanID: parentRootSpanID,
 			OutMeta:          outMeta,
 		}
-		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
+		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.TenantStore, deps.ProviderRegistry, deps.PostTurn, deps.Cfg)
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true

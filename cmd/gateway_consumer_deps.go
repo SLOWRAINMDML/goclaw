@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -28,6 +29,7 @@ type ConsumerDeps struct {
 	ContactCollector *store.ContactCollector
 	SystemConfigs    store.SystemConfigStore
 	TenantStore      store.TenantStore
+	ProviderRegistry *providers.Registry
 	TaskRunSessions  sync.Map
 	SubagentMgr      *tools.SubagentManager
 	BgWg             sync.WaitGroup

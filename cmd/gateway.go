@@ -257,7 +257,7 @@ func runGateway() {
 	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, sandboxMgr, pgStores.SecureCLI)
 	if subagentMgr != nil {
 		// Wire announce queue for batched subagent result delivery (matching TS debounce pattern).
-		announceQueue := tools.NewAnnounceQueue(1000, 20, makeDelegateAnnounceCallback(subagentMgr, msgBus))
+		announceQueue := tools.NewAnnounceQueue(1000, 20, makeDelegateAnnounceCallback(subagentMgr, msgBus, pgStores.Tenants, providerRegistry))
 		subagentMgr.SetAnnounceQueue(announceQueue)
 		if pgStores.SubagentTasks != nil {
 			subagentMgr.SetTaskStore(pgStores.SubagentTasks)
