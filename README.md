@@ -160,25 +160,80 @@ source .env.local && ./goclaw
 
 ### Hierarchical child workspaces (WIP)
 
-GoClaw can be extended with child workspaces under a master/admin tenant. The current in-repo implementation work includes:
+> **Status:** experimental scaffolding merged on **2026-04-20 14:21:29 UTC** into `dev`  
+> **Latest implementation commit:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`
 
-- `POST /v1/tenants/{id}/children` — create a child workspace (implemented via child tenant settings)
-- `GET /v1/tenants/{id}/children` — list child workspaces for a parent tenant
-- child settings support:
-  - `inherit_parent_access`
-  - `workspace_mode`
-  - `git_links`
-  - `channel_bindings`
-  - `output_bindings`
-  - `coding_provider`
-  - `coding_model`
-  - `reasoning_output` (`full`, `summary`, `none`)
-- skill operations support:
-  - `POST /v1/skills/{id}/fork` — fork a shared/public skill into the current tenant workspace
-  - `POST /v1/skills/{id}/prepare-runtime` — prepare Python runtime artifacts under `.runtime/`
-  - `GET/POST /v1/skills/{id}/feedback` — record and inspect issue/example feedback attached to a skill
+This branch now includes the first in-repo foundation for a **master/admin workspace → child workspace** operating model.
+The implementation uses **child tenants + tenant settings** so the feature can evolve without an immediate database migration.
 
-Example child workspace payload:
+#### What this enables right now
+
+- A master/admin tenant can create **child workspaces** through API.
+- Child workspaces keep **isolated storage, workspace paths, and skill directories**.
+- Parent access can be **optionally inherited** via `inherit_parent_access`.
+- Each child workspace can carry its own:
+  - git linkage metadata
+  - channel binding metadata
+  - output binding metadata
+  - coding provider/model preference
+  - reasoning output mode (`full`, `summary`, `none`)
+- Shared/public skills can be **forked into a child workspace**.
+- Forked or uploaded skills can prepare a lightweight **Python runtime wrapper** under `.runtime/`.
+- Skill misuse / issue / example feedback can be stored as structured records in the skill folder.
+
+#### Newly added endpoints
+
+| Endpoint | Purpose | Notes |
+|---|---|---|
+| `GET /v1/tenants/{id}/children` | List child workspaces for a parent tenant | Owner/admin path |
+| `POST /v1/tenants/{id}/children` | Create a child workspace | Stored as child tenant settings |
+| `POST /v1/skills/{id}/fork` | Fork a shared/public skill into current tenant scope | Excludes `.runtime`, `feedback`, `.env`, obvious credential files |
+| `POST /v1/skills/{id}/prepare-runtime` | Prepare runtime artifacts for a skill | Current MVP focuses on Python |
+| `GET /v1/skills/{id}/feedback` | Read recorded issue/example feedback | Reads `feedback/examples.jsonl` |
+| `POST /v1/skills/{id}/feedback` | Append issue/example feedback | Structured JSONL record |
+
+#### Child workspace settings currently recognized
+
+| Setting | Meaning |
+|---|---|
+| `parent_tenant_id` | Parent/master workspace identifier |
+| `inherit_parent_access` | Allow parent admin/owner to access/manage child workspace |
+| `workspace_mode` | Intended isolation strategy; current default is `isolated` |
+| `git_links` | External git repository metadata for future sync/mirroring workflows |
+| `channel_bindings` | Metadata describing which channel/chat/topic should bind to which agent |
+| `output_bindings` | Metadata for outbound delivery targets such as webhook/API channels |
+| `coding_provider` | Preferred specialist coding backend (for future routing) |
+| `coding_model` | Preferred model for coding tasks |
+| `reasoning_output` | Channel-visible reasoning policy: `full`, `summary`, `none` |
+
+#### Reasoning output modes
+
+| Mode | Effect |
+|---|---|
+| `full` | Show raw reasoning preview in supported streaming channels |
+| `summary` | Show a compact deterministic reasoning summary |
+| `none` | Hide reasoning from channel output while keeping the normal answer flow |
+
+#### Skill workspace behavior added in this update
+
+| Capability | Current behavior |
+|---|---|
+| Skill fork | Copies a skill into the current tenant skill store for local modification |
+| Sensitive file avoidance | Fork skips `.runtime`, `feedback`, `.env`, `secrets/`, and obvious credential-like files |
+| Runtime preparation | Creates `.runtime/run.py` + `.runtime/manifest.json` for Python-entrypoint skills |
+| Feedback recording | Appends structured examples/issues into `feedback/examples.jsonl` |
+
+#### Current limitations
+
+This is **not yet the finished product**. The current `dev` implementation is intended as scaffolding and documentation of the direction.
+
+- `channel_bindings` and `output_bindings` are currently **stored as metadata**, not fully enforced as live DB-driven routing.
+- `git_links` are currently **descriptive metadata only** — repository sync/mirroring still needs execution logic.
+- Parent/child authorization is partially wired for HTTP tenant resolution, but still needs broader end-to-end verification.
+- Runtime preparation currently targets **Python MVP only**.
+- Full compile/build verification still depends on a Go-capable environment.
+
+#### Example child workspace payload
 
 ```json
 {
@@ -214,6 +269,38 @@ Example child workspace payload:
     }
   ]
 }
+```
+
+#### Example skill fork flow
+
+```bash
+# 1) Fork a shared/public skill into the current tenant workspace
+curl -X POST http://localhost:18790/v1/skills/<skill-id>/fork \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "client-a-custom-skill",
+    "slug": "client-a-custom-skill",
+    "visibility": "internal"
+  }'
+
+# 2) Prepare runtime artifacts if the skill has a Python entrypoint
+curl -X POST http://localhost:18790/v1/skills/<forked-skill-id>/prepare-runtime \
+  -H 'Authorization: Bearer <token>'
+
+# 3) Attach issue/example feedback to the skill
+curl -X POST http://localhost:18790/v1/skills/<forked-skill-id>/feedback \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "issue",
+    "behavior_ref": "tool invocation",
+    "code_path": "scripts/run.py",
+    "prompt": "Summarize the repo",
+    "expected_behavior": "Generate a concise repository summary",
+    "actual_behavior": "Raised a missing dependency error",
+    "note": "Need fallback handling when dependency is absent"
+  }'
 ```
 
 ### With Docker
