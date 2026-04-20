@@ -106,8 +106,9 @@ source .env.local && ./goclaw
 
 ### 계층형 하위 워크스페이스 (WIP)
 
-> **상태:** 실험적 스캐폴딩이 **2026-04-20 14:21:29 UTC** 기준 `dev` 브랜치에 반영됨  
-> **최신 구현 커밋:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`
+> **상태:** 실험적 워크스페이스 스캐폴딩과 런타임 라우팅 업데이트가 **2026-04-20 14:21:29 UTC** 기준 `dev` 브랜치에 반영됨  
+> **초기 스캐폴딩 커밋:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`  
+> **최신 런타임 override 커밋:** `2399f3b1` — `feat: apply tenant coding overrides across runtime paths`
 
 현재 `dev` 브랜치에는 **마스터/관리자 워크스페이스 → 하위 워크스페이스** 운영 모델을 위한 첫 번째 기반 작업이 들어가 있습니다.
 이 구현은 즉시 스키마 마이그레이션을 강제하지 않도록 **child tenant + tenant settings** 방식으로 시작했습니다.
@@ -148,8 +149,8 @@ source .env.local && ./goclaw
 | `git_links` | 향후 sync/mirroring에 사용할 외부 git 저장소 메타데이터 |
 | `channel_bindings` | 어떤 채널/chat/topic이 어떤 agent에 묶일지 설명하는 메타데이터 |
 | `output_bindings` | webhook/API 채널 같은 outbound 대상 메타데이터 |
-| `coding_provider` | 향후 코딩 작업 전용 라우팅에 사용할 선호 provider |
-| `coding_model` | 코딩 작업용 선호 모델 |
+| `coding_provider` | 코딩 성격의 실행 경로에서 tenant별 `ProviderOverride`로 적용되는 선호 provider |
+| `coding_model` | 코딩 성격의 실행 경로에서 tenant별 `ModelOverride`로 적용되는 선호 모델 |
 | `reasoning_output` | 채널에 보이는 reasoning 정책: `full`, `summary`, `none` |
 
 #### Reasoning 출력 모드
@@ -169,14 +170,24 @@ source .env.local && ./goclaw
 | 런타임 준비 | Python 엔트리포인트 스킬에 대해 `.runtime/run.py` + `.runtime/manifest.json` 생성 |
 | 피드백 기록 | 구조화된 예시/이슈를 `feedback/examples.jsonl`에 append |
 
+#### 현재 런타임에 연결된 라우팅 동작
+
+| 설정 | 현재 런타임 효과 |
+|---|---|
+| `channel_bindings` | inbound channel/chat/topic 메시지를 tenant가 지정한 agent로 런타임에 라우팅할 수 있음 |
+| `output_bindings` | outbound 응답을 루프 방지 메타데이터와 함께 추가 대상들로 fan-out 할 수 있음 |
+| `coding_provider` | normal inbound, teammate, announce/subagent-announce, cron, delegate 실행 경로에 tenant별 `ProviderOverride` 적용 |
+| `coding_model` | tenant별 `ModelOverride` 적용. 값이 비어 있어도 `coding_provider`가 해석되면 provider 기본 모델 사용 |
+
 #### 현재 한계
 
 이 구현은 **완성본이 아니라 방향을 잡기 위한 스캐폴딩**입니다.
 
-- `channel_bindings`, `output_bindings`는 현재 **메타데이터로 저장만** 되고, 완전한 DB 기반 실시간 라우팅까지는 아직 연결되지 않았습니다.
+- `channel_bindings`, `output_bindings`는 이제 주요 게이트웨이 경로에서 런타임 wiring이 들어갔지만, 더 넓은 엔드투엔드 검증과 production hardening이 필요합니다.
 - `git_links`는 현재 **설명용 메타데이터**이며, 실제 저장소 sync/mirroring 실행 로직은 아직 필요합니다.
 - 부모/자식 권한 상속은 HTTP tenant 해석 쪽에 일부 연결됐지만, 전체 엔드투엔드 검증은 더 필요합니다.
 - 런타임 준비는 현재 **Python MVP만** 대상으로 합니다.
+- `coding_provider` / `coding_model` override는 주요 런타임 경로에 연결됐지만, Go 실행 환경에서의 전체 compile/test 검증은 아직 필요합니다.
 - 전체 compile/build 검증은 Go 실행 가능한 환경에서 추가 확인이 필요합니다.
 
 #### Child workspace 생성 예시 payload

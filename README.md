@@ -160,8 +160,9 @@ source .env.local && ./goclaw
 
 ### Hierarchical child workspaces (WIP)
 
-> **Status:** experimental scaffolding merged on **2026-04-20 14:21:29 UTC** into `dev`  
-> **Latest implementation commit:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`
+> **Status:** experimental workspace scaffolding and runtime routing updates merged on **2026-04-20 14:21:29 UTC** into `dev`  
+> **Initial scaffolding commit:** `fd1debb4` — `feat: add hierarchical workspace and skill runtime scaffolding`  
+> **Latest runtime override commit:** `2399f3b1` — `feat: apply tenant coding overrides across runtime paths`
 
 This branch now includes the first in-repo foundation for a **master/admin workspace → child workspace** operating model.
 The implementation uses **child tenants + tenant settings** so the feature can evolve without an immediate database migration.
@@ -202,8 +203,8 @@ The implementation uses **child tenants + tenant settings** so the feature can e
 | `git_links` | External git repository metadata for future sync/mirroring workflows |
 | `channel_bindings` | Metadata describing which channel/chat/topic should bind to which agent |
 | `output_bindings` | Metadata for outbound delivery targets such as webhook/API channels |
-| `coding_provider` | Preferred specialist coding backend (for future routing) |
-| `coding_model` | Preferred model for coding tasks |
+| `coding_provider` | Preferred specialist coding backend used as a per-tenant runtime provider override for coding-oriented execution paths |
+| `coding_model` | Preferred model used as a per-tenant runtime model override for coding-oriented execution paths |
 | `reasoning_output` | Channel-visible reasoning policy: `full`, `summary`, `none` |
 
 #### Reasoning output modes
@@ -223,14 +224,24 @@ The implementation uses **child tenants + tenant settings** so the feature can e
 | Runtime preparation | Creates `.runtime/run.py` + `.runtime/manifest.json` for Python-entrypoint skills |
 | Feedback recording | Appends structured examples/issues into `feedback/examples.jsonl` |
 
+#### Runtime routing behavior currently wired
+
+| Setting | Current runtime effect |
+|---|---|
+| `channel_bindings` | Inbound channel/chat/topic messages can be routed to a tenant-selected agent at runtime |
+| `output_bindings` | Outbound replies can fan out to additional configured delivery targets with loop prevention metadata |
+| `coding_provider` | Applies a tenant-scoped `ProviderOverride` on normal inbound, teammate, announce/subagent-announce, cron, and delegate execution paths |
+| `coding_model` | Applies a tenant-scoped `ModelOverride`; if omitted but `coding_provider` resolves, the provider default model is used |
+
 #### Current limitations
 
 This is **not yet the finished product**. The current `dev` implementation is intended as scaffolding and documentation of the direction.
 
-- `channel_bindings` and `output_bindings` are currently **stored as metadata**, not fully enforced as live DB-driven routing.
+- `channel_bindings` and `output_bindings` now have runtime wiring for the primary gateway paths, but still need broader end-to-end verification and more production hardening.
 - `git_links` are currently **descriptive metadata only** — repository sync/mirroring still needs execution logic.
 - Parent/child authorization is partially wired for HTTP tenant resolution, but still needs broader end-to-end verification.
 - Runtime preparation currently targets **Python MVP only**.
+- `coding_provider` / `coding_model` overrides are now threaded through the main runtime paths, but still need full compile/test verification in a Go-enabled environment.
 - Full compile/build verification still depends on a Go-capable environment.
 
 #### Example child workspace payload
