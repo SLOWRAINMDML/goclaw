@@ -67,6 +67,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **Agent Teams & Orchestration** — Shared task boards, inter-agent delegation (sync/async), 3 orchestration modes (auto/explicit/manual)
 - **Self-Evolution** — Metrics → suggestions → auto-adapt with guardrails. Agents refine their own communication style
 - **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), RBAC, isolated sessions
+- **Hierarchical Workspaces (WIP)** — Master/admin tenants can create child workspaces, inherit admin access, attach channel/output bindings, and keep storage/skills isolated per child tenant
 - **20+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, DashScope, Claude CLI, Codex, ACP, and any OpenAI-compatible endpoint
 - **7 Messaging Channels** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Production Security** — 5-layer permission system, rate limiting, prompt injection detection, SSRF protection, AES-256-GCM encryption
@@ -156,6 +157,64 @@ source .env.local && ./goclaw
 ```
 
 > **Note:** The default branch is `dev` (active development). Use `-b main` to clone the stable release branch.
+
+### Hierarchical child workspaces (WIP)
+
+GoClaw can be extended with child workspaces under a master/admin tenant. The current in-repo implementation work includes:
+
+- `POST /v1/tenants/{id}/children` — create a child workspace (implemented via child tenant settings)
+- `GET /v1/tenants/{id}/children` — list child workspaces for a parent tenant
+- child settings support:
+  - `inherit_parent_access`
+  - `workspace_mode`
+  - `git_links`
+  - `channel_bindings`
+  - `output_bindings`
+  - `coding_provider`
+  - `coding_model`
+  - `reasoning_output` (`full`, `summary`, `none`)
+- skill operations support:
+  - `POST /v1/skills/{id}/fork` — fork a shared/public skill into the current tenant workspace
+  - `POST /v1/skills/{id}/prepare-runtime` — prepare Python runtime artifacts under `.runtime/`
+  - `GET/POST /v1/skills/{id}/feedback` — record and inspect issue/example feedback attached to a skill
+
+Example child workspace payload:
+
+```json
+{
+  "name": "client-a-workspace",
+  "slug": "client-a",
+  "inherit_parent_access": true,
+  "workspace_mode": "isolated",
+  "reasoning_output": "summary",
+  "coding_provider": "codex",
+  "coding_model": "gpt-5-codex",
+  "git_links": [
+    {
+      "name": "client-a-repo",
+      "repo_url": "https://github.com/example/client-a",
+      "branch": "main",
+      "directory": "workspace",
+      "mode": "mirror"
+    }
+  ],
+  "channel_bindings": [
+    {
+      "channel_instance_id": "<channel-instance-uuid>",
+      "match_chat_ids": ["1234567890"],
+      "agent_id": "<agent-uuid>",
+      "enabled": true
+    }
+  ],
+  "output_bindings": [
+    {
+      "type": "webhook",
+      "target": "https://example.com/hooks/reply",
+      "channel": "discord"
+    }
+  ]
+}
+```
 
 ### With Docker
 

@@ -71,9 +71,12 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				rc.hasThinking = true
 				thinkText := rc.thinkingBuffer
 				currentStream := rc.stream
+				reasoningMode := rc.ReasoningMode
 				rc.mu.Unlock()
 				if currentStream != nil {
-					currentStream.Update(ctx, formatReasoningPreview(thinkText))
+					if preview := formatReasoningPreviewForMode(reasoningMode, thinkText); preview != "" {
+						currentStream.Update(ctx, preview)
+					}
 				}
 			}
 		case protocol.AgentEventToolCall:
@@ -141,11 +144,14 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 						rc.thinkingBuffer = split.Thinking
 						thinkText := rc.thinkingBuffer
 						currentStream := rc.stream
+						reasoningMode := rc.ReasoningMode
 						if split.Partial {
 							// Still inside <think> — update reasoning stream, wait for close
 							rc.mu.Unlock()
 							if currentStream != nil {
-								currentStream.Update(ctx, formatReasoningPreview(thinkText))
+								if preview := formatReasoningPreviewForMode(reasoningMode, thinkText); preview != "" {
+									currentStream.Update(ctx, preview)
+								}
 							}
 							break
 						}
@@ -434,6 +440,35 @@ func formatToolStatus(toolName string) string {
 		}
 	}
 	return "🔧 Running " + toolName + "..."
+}
+
+// formatReasoningPreviewForMode adapts visible reasoning output per tenant/channel policy.
+// full: raw preview, summary: compact deterministic preview, none: hidden.
+func formatReasoningPreviewForMode(mode, thinking string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "none":
+		return ""
+	case "summary":
+		return formatReasoningSummaryPreview(thinking)
+	default:
+		return formatReasoningPreview(thinking)
+	}
+}
+
+func formatReasoningSummaryPreview(thinking string) string {
+	if thinking == "" {
+		return ""
+	}
+	clean := strings.Join(strings.Fields(thinking), " ")
+	if clean == "" {
+		return ""
+	}
+	const maxRunes = 220
+	runes := []rune(clean)
+	if len(runes) > maxRunes {
+		clean = string(runes[:maxRunes-3]) + "..."
+	}
+	return "_Reasoning summary:_\n" + clean
 }
 
 // formatReasoningPreview formats accumulated thinking text for display as a

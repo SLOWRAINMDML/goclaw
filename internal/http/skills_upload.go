@@ -260,6 +260,11 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			maps.Copy(response, depState.response)
 		}
 	}
+	if runtimePrep, err := skills.PrepareRuntime(destDir, frontmatter); err == nil && runtimePrep != nil {
+		response["runtime"] = runtimePrep
+	} else if err != nil {
+		response["runtime_warning"] = err.Error()
+	}
 
 	// Use depsCtx (non-cancellable) so the DB write completes even if the
 	// client disconnects during the dep-install window.

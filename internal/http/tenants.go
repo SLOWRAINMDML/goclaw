@@ -39,6 +39,8 @@ func (h *TenantsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/tenants/{id}/users", admin(h.handleUsersList))
 	mux.HandleFunc("POST /v1/tenants/{id}/users", admin(h.handleUsersAdd))
 	mux.HandleFunc("DELETE /v1/tenants/{id}/users/{userId}", admin(h.handleUsersRemove))
+	mux.HandleFunc("GET /v1/tenants/{id}/children", admin(h.handleChildrenList))
+	mux.HandleFunc("POST /v1/tenants/{id}/children", admin(h.handleChildrenCreate))
 }
 
 func (h *TenantsHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -294,6 +296,113 @@ func (h *TenantsHandler) handleUsersRemove(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+func (h *TenantsHandler) handleChildrenList(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	if !store.IsOwnerRole(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.children.list")})
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "tenant")})
+		return
+	}
+	children, err := listChildTenants(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if children == nil {
+		children = []store.TenantData{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tenants": children})
+}
+
+func (h *TenantsHandler) handleChildrenCreate(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	if !store.IsOwnerRole(r.Context()) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.children.create")})
+		return
+	}
+	parentID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "tenant")})
+		return
+	}
+	parent, err := h.tenantStore.GetTenant(r.Context(), parentID)
+	if err != nil || parent == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "tenant", parentID.String())})
+		return
+	}
+	var input struct {
+		Name               string              `json:"name"`
+		Slug               string              `json:"slug"`
+		InheritParentAccess *bool              `json:"inherit_parent_access"`
+		WorkspaceMode      string              `json:"workspace_mode"`
+		GitLinks           []TenantGitLink     `json:"git_links"`
+		ChannelBindings    []TenantChannelBind `json:"channel_bindings"`
+		OutputBindings     []TenantOutputBind  `json:"output_bindings"`
+		ReasoningOutput    string              `json:"reasoning_output"`
+		CodingProvider     string              `json:"coding_provider"`
+		CodingModel        string              `json:"coding_model"`
+	}
+	if !bindJSON(w, r, locale, &input) {
+		return
+	}
+	if input.Name == "" || input.Slug == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "name, slug")})
+		return
+	}
+	if !isValidSlug(input.Slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidSlug, "slug")})
+		return
+	}
+	inherit := true
+	if input.InheritParentAccess != nil {
+		inherit = *input.InheritParentAccess
+	}
+	settings := TenantSettings{
+		ParentTenantID:      parentID.String(),
+		InheritParentAccess: inherit,
+		WorkspaceMode:       input.WorkspaceMode,
+		GitLinks:            input.GitLinks,
+		ChannelBindings:     input.ChannelBindings,
+		OutputBindings:      input.OutputBindings,
+		ReasoningOutput:     normalizeReasoningOutputMode(input.ReasoningOutput),
+		CodingProvider:      input.CodingProvider,
+		CodingModel:         input.CodingModel,
+	}
+	if settings.WorkspaceMode == "" {
+		settings.WorkspaceMode = "isolated"
+	}
+	child := &store.TenantData{
+		ID:       store.GenNewID(),
+		Name:     input.Name,
+		Slug:     input.Slug,
+		Status:   store.TenantStatusActive,
+		Settings: marshalTenantSettings(settings),
+	}
+	if err := h.tenantStore.CreateTenant(r.Context(), child); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToCreate, "tenant", err.Error())})
+		return
+	}
+	if h.workspace != "" {
+		tenantDir := filepath.Join(h.workspace, "tenants", child.Slug)
+		if err := os.MkdirAll(tenantDir, 0755); err != nil {
+			slog.Warn("tenants.children.create: failed to create workspace dir", "dir", tenantDir, "error", err)
+		}
+	}
+	if userID := store.UserIDFromContext(r.Context()); userID != "" {
+		_ = h.tenantStore.AddUser(r.Context(), child.ID, userID, store.TenantRoleOwner)
+	}
+	h.emitCacheInvalidate(bus.CacheKindTenants, child.ID.String())
+	emitAudit(h.msgBus, r, "tenant.child.created", "tenant", child.ID.String())
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"tenant": child,
+		"parent": map[string]any{"id": parent.ID, "slug": parent.Slug},
+	})
 }
 
 func (h *TenantsHandler) emitCacheInvalidate(kind, key string) {

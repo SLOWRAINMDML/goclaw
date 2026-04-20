@@ -26,6 +26,7 @@ type ConsumerDeps struct {
 	PostTurn         tools.PostTurnProcessor
 	QuotaChecker     *channels.QuotaChecker
 	ContactCollector *store.ContactCollector
+	SystemConfigs    store.SystemConfigStore
 	TaskRunSessions  sync.Map
 	SubagentMgr      *tools.SubagentManager
 	BgWg             sync.WaitGroup

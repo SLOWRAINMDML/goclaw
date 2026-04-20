@@ -6,7 +6,7 @@ import "github.com/google/uuid"
 
 // RegisterRun associates a run ID with a channel context so agent events
 // (chunks, tool calls, completion) can be forwarded to the originating channel.
-func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool) {
+func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool, reasoningMode string) {
 	m.runs.Store(runID, &RunContext{
 		ChannelName:       channelName,
 		ChatID:            chatID,
@@ -16,6 +16,7 @@ func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, meta
 		Streaming:         streaming,
 		BlockReplyEnabled: blockReply,
 		ToolStatusEnabled: toolStatus,
+		ReasoningMode:     reasoningMode,
 	})
 }
 
