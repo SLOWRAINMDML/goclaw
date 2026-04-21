@@ -172,8 +172,8 @@ func ExecuteWithChain(
 		}
 
 		// credentialProvider is optional — providers that don't expose static
-		// credentials (e.g. OAuth-based CodexProvider) pass nil and each
-		// callProvider falls back to using the provider's Chat() API.
+		// credentials can still participate as long as they surface an auth token
+		// and API base through the narrow credentialProvider interface.
 		cp, _ := p.(credentialProvider)
 
 		// Inject resolved provider type into params so callProvider can route correctly.

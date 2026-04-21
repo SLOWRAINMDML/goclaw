@@ -57,6 +57,16 @@ func TestCodexProviderDefaultModel(t *testing.T) {
 	}
 }
 
+func TestCodexProviderAPIHelpers(t *testing.T) {
+	p := NewCodexProvider("openai-codex", &staticTokenSource{token: "oauth-token"}, "https://chatgpt.com/backend-api", "gpt-5.4")
+	if got := p.APIKey(); got != "oauth-token" {
+		t.Fatalf("APIKey() = %q, want oauth-token", got)
+	}
+	if got := p.APIBase(); got != "https://chatgpt.com/backend-api" {
+		t.Fatalf("APIBase() = %q, want https://chatgpt.com/backend-api", got)
+	}
+}
+
 func TestCodexProviderBuildRequestBody(t *testing.T) {
 	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "gpt-4o")
 

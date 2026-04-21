@@ -60,6 +60,28 @@ func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
 
+// APIKey exposes the current OAuth bearer token so media tools that rely on
+// OpenAI-compatible REST endpoints (such as image generation) can reuse the
+// Codex provider without needing a separate API-key-backed provider entry.
+func (p *CodexProvider) APIKey() string {
+	if p == nil || p.tokenSource == nil {
+		return ""
+	}
+	token, err := p.tokenSource.Token()
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
+// APIBase exposes the resolved backend base URL for auxiliary REST calls.
+func (p *CodexProvider) APIBase() string {
+	if p == nil {
+		return ""
+	}
+	return p.apiBase
+}
+
 // Capabilities implements CapabilitiesAware for pipeline code-path selection.
 func (p *CodexProvider) Capabilities() ProviderCapabilities {
 	return ProviderCapabilities{
